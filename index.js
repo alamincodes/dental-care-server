@@ -5,15 +5,14 @@ require("dotenv").config();
 const app = express();
 app.use(cors());
 app.use(express.json());
-// dentalCare
-// dtd7gPIIh4A4MpmB
+
 app.get("/", (req, res) => {
   res.send("Dental care server running");
 });
 
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.oiqqfzt.mongodb.net/?retryWrites=true&w=majority`;
-console.log(uri);
+
 const client = new MongoClient(uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -22,15 +21,25 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    const appoinmentOption = client
+    const appointmentOption = client
       .db("dentalCare")
       .collection("appointmentOption");
     const bookings = client.db("dentalCare").collection("bookings");
     app.get("/appointmentOption", async (req, res) => {
       const query = {};
-      const cursor = appoinmentOption.find(query);
-      const result = await cursor.toArray();
-      res.send(result);
+      const date = req.query.date;
+      const cursor = appointmentOption.find(query);
+      const options = await cursor.toArray();
+      const bookQuery = {appointmentDate: date}
+      const alreadyBooked = await bookings.find(bookQuery).toArray()
+      options.forEach(option =>{
+        const optionBooked = alreadyBooked.filter(book => book.treatment === option.name)
+        const bookedSlot = optionBooked.map(book => book.slot)
+        const remainingSlots =  option.slots.filter(slot => !bookedSlot.includes(slot))
+        option.slots = remainingSlots;
+        console.log(bookedSlot)
+      })
+      res.send(options);
     });
     app.post("/bookings", async (req, res) => {
       const booking = req.body;
