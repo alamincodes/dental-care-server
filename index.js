@@ -2,7 +2,10 @@ const express = require("express");
 const cors = require("cors");
 const port = 5000;
 require("dotenv").config();
+const jwt = require("jsonwebtoken");
+
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
@@ -19,12 +22,28 @@ const client = new MongoClient(uri, {
   serverApi: ServerApiVersion.v1,
 });
 
+function verifyJWT(req, res, next) {
+  const headerAuthorization = req.headers.authorization;
+  if (!headerAuthorization) {
+    return res.status(401).send("unauthorize access");
+  }
+  const token = headerAuthorization.split(" ")[1];
+  jwt.verify(token, process.env.ACCESS_TOKEN, function (err, decoded) {
+    if (err) {
+      return res.status(403).send("forbidden access");
+    }
+    req.decoded = decoded;
+    next();
+  });
+}
 async function run() {
   try {
     const appointmentOption = client
       .db("dentalCare")
       .collection("appointmentOption");
     const bookings = client.db("dentalCare").collection("bookings");
+    const usersCollection = client.db("dentalCare").collection("users");
+
     app.get("/appointmentOption", async (req, res) => {
       const query = {};
       const date = req.query.date;
@@ -45,9 +64,39 @@ async function run() {
       });
       res.send(options);
     });
+
+    app.get("/bookings", verifyJWT, async (req, res) => {
+      const userEmail = req.query.email;
+      const decodedEmail = req.decoded.email;
+      if (userEmail !== decodedEmail) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: userEmail };
+      const bookingsData = await bookings.find(query).toArray();
+      res.send(bookingsData);
+    });
+
+    app.get("/jwt", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const users = await usersCollection.findOne(query);
+      if (users) {
+        const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, {
+          expiresIn: "1h",
+        });
+        return res.send({ accessToken: token });
+      }
+      res.status(403).send({ accessToken: "" });
+    });
+
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
     app.post("/bookings", async (req, res) => {
       const booking = req.body;
-      console.log(booking);
       const query = {
         email: booking.email,
         appointmentDate: booking.appointmentDate,
