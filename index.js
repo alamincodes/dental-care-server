@@ -30,19 +30,34 @@ async function run() {
       const date = req.query.date;
       const cursor = appointmentOption.find(query);
       const options = await cursor.toArray();
-      const bookQuery = {appointmentDate: date}
-      const alreadyBooked = await bookings.find(bookQuery).toArray()
-      options.forEach(option =>{
-        const optionBooked = alreadyBooked.filter(book => book.treatment === option.name)
-        const bookedSlot = optionBooked.map(book => book.slot)
-        const remainingSlots =  option.slots.filter(slot => !bookedSlot.includes(slot))
+      const bookQuery = { appointmentDate: date };
+      const alreadyBooked = await bookings.find(bookQuery).toArray();
+      options.forEach((option) => {
+        const optionBooked = alreadyBooked.filter(
+          (book) => book.treatment === option.name
+        );
+        const bookedSlot = optionBooked.map((book) => book.slot);
+        const remainingSlots = option.slots.filter(
+          (slot) => !bookedSlot.includes(slot)
+        );
         option.slots = remainingSlots;
-        console.log(bookedSlot)
-      })
+        // console.log(bookedSlot)
+      });
       res.send(options);
     });
     app.post("/bookings", async (req, res) => {
       const booking = req.body;
+      console.log(booking);
+      const query = {
+        email: booking.email,
+        appointmentDate: booking.appointmentDate,
+        treatment: booking.treatment,
+      };
+      const alreadyBooked = await bookings.find(query).toArray();
+      if (alreadyBooked.length) {
+        const message = `You already have a booking on date ${booking.appointmentDate}`;
+        return res.send({ acknowlege: false, message });
+      }
       const result = await bookings.insertOne(booking);
       res.send(result);
     });
