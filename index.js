@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = 5000;
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
@@ -13,7 +14,6 @@ app.get("/", (req, res) => {
   res.send("Dental care server running");
 });
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.oiqqfzt.mongodb.net/?retryWrites=true&w=majority`;
 
 const client = new MongoClient(uri, {
@@ -65,6 +65,11 @@ async function run() {
       res.send(options);
     });
 
+    app.get("/users", async (req, res) => {
+      const query = {};
+      const users = await usersCollection.find(query).toArray();
+      res.send(users);
+    });
     app.get("/bookings", verifyJWT, async (req, res) => {
       const userEmail = req.query.email;
       const decodedEmail = req.decoded.email;
@@ -89,12 +94,14 @@ async function run() {
       res.status(403).send({ accessToken: "" });
     });
 
+    // create user
     app.post("/users", async (req, res) => {
       const user = req.body;
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
 
+    // create booking
     app.post("/bookings", async (req, res) => {
       const booking = req.body;
       const query = {
@@ -108,6 +115,33 @@ async function run() {
         return res.send({ acknowlege: false, message });
       }
       const result = await bookings.insertOne(booking);
+      res.send(result);
+    });
+
+    // get admin
+    app.get("/users/admin/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      res.send({ isAdmin: user?.role === "admin" });
+    });
+    // create admin
+    app.put("/users/admin/:id", verifyJWT, async (req, res) => {
+      const decodedEmail = req.decoded.email;
+      const query = { email: decodedEmail };
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== "admin") {
+        return res.status(403).send({ message: "fobidden access" });
+      }
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const option = { upsert: true };
+      const updateDoc = {
+        $set: {
+          role: "admin",
+        },
+      };
+      const result = await usersCollection.updateOne(filter, updateDoc, option);
       res.send(result);
     });
   } finally {
