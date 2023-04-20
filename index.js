@@ -3,6 +3,9 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = 5000;
 require("dotenv").config();
+const nodemailer = require("nodemailer");
+const mg = require("nodemailer-mailgun-transport");
+
 const jwt = require("jsonwebtoken");
 
 const app = express();
@@ -23,6 +26,44 @@ const client = new MongoClient(uri, {
   serverApi: ServerApiVersion.v1,
 });
 
+function sendBookingEmail(booking) {
+  const { email, treatment, appointmentDate, slot } = booking;
+
+  const auth = {
+    auth: {
+      api_key: process.env.EMAIL_SEND_KEY,
+      domain: process.env.EMAIL_SEND_DOMAIN,
+    },
+  };
+
+  const transporter = nodemailer.createTransport(mg(auth));
+
+  console.log("sending email", email);
+  transporter.sendMail(
+    {
+      from: "mdalaminn8733@gmail.com", // verified sender email
+      to: email || "mdalaminn8733@gmail.com", // recipient email
+      subject: `Your appointment for ${treatment} is confirmed`, // Subject line
+      text: "Hello world!", // plain text body
+      html: `
+      <h3>Your appointment is confirmed</h3>
+      <div>
+          <p>Your appointment for treatment: ${treatment}</p>
+          <p>Please visit us on ${appointmentDate} at ${slot}</p>
+          <p>Thanks from Doctors Portal.</p>
+      </div>
+      
+      `, // html body
+    },
+    function (error, info) {
+      if (error) {
+        console.log("Email send error", error);
+      } else {
+        console.log("Email sent: " + info);
+      }
+    }
+  );
+}
 function verifyJWT(req, res, next) {
   const headerAuthorization = req.headers.authorization;
   if (!headerAuthorization) {
@@ -37,6 +78,7 @@ function verifyJWT(req, res, next) {
     next();
   });
 }
+
 async function run() {
   try {
     // appointment option
@@ -102,7 +144,6 @@ async function run() {
       const booking = req.body;
       const price = booking.price;
       const amount = price * 100;
-
       const paymentIntent = await stripe.paymentIntents.create({
         currency: "usd",
         amount,
@@ -210,6 +251,8 @@ async function run() {
         return res.send({ acknowlege: false, message });
       }
       const result = await bookings.insertOne(booking);
+      // send email
+      sendBookingEmail(booking);
       res.send(result);
     });
 
